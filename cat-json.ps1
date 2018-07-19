@@ -1,8 +1,12 @@
 
 
-cd /usr/local/cat-20180521/data/json
+$datapath = "/usr/local/cat-20180521/data/json"
+
+# expect a lot of red.  You get the most out of powershell if you are using pscustomobjects where you can.
+# if I was going to revise this, I'd put everything that didn't error out in pscustomobject and the rest to a massive hash table.
+# I'd also expand it to trawl the mods subdirs.
 function get-cddacollection {
-  $jsonfiles = get-childitem *.json -recurse
+  $jsonfiles = get-childitem $($datapath)/*.json -recurse
   $collection = $null
   foreach ($jsonfile in $jsonfiles){
     $filedata = get-content $jsonfile
@@ -11,16 +15,6 @@ function get-cddacollection {
   }
   return $collection
 }
-cd /usr/local/cat-20180521/data
-
-<#
-# e.g. armor
-$armorcollection = $collection | where-object { $_.type -eq "ARMOR" }
-$lightarmor = $armorcollection | where-object { $_.id -like "power*light" }
-
-# e.g. ammo
-$ammocollection = $collection | where-object { $_.type -eq "AMMO" }
-#>
 
 function get-cddaguns($collection){
   $guncollection = $collection | where-object { $_.type -eq "GUN" } | select-object skill,abstract,copy-from,id,name,ammo,range,ranged_damage
@@ -65,8 +59,9 @@ function get-cddaguns($collection){
     $guns += $protoitem
   }
   #$guns | sort-object abstract,skill,id | format-table -auto
-  # if I was a good programmer I would put this in a function.  after about 4-5 passes all the parent inheritance problems are sorted out.
-
+  # if I was acting like a good programmer I would put this in a function.  after about 4-5 passes all the parent inheritance problems are sorted out.
+  # the only reason for this is that the gun data is built on multi-layer nested copy-from statements, so there is a lot of parsing needed to derive final stats.
+  # each parse will derive 1 parent level.
   foreach ($gun in $guns){
     if ($gun.abstract -eq $true){ continue }
     if ((!$gun.range) -or (!$gun.skill) -or (!$gun.ammo) -or (!$gun.damage)){
@@ -145,6 +140,8 @@ function get-cddaguns($collection){
   }
   return $gunsammo
 }
+
+
 function get-cddaarmor ($collection){
   $armorcollection = $collection | where-object { $_.type -eq "ARMOR" }
   $toolarmor = $collection | where-object { $_.type -eq "TOOL_ARMOR" }
@@ -159,7 +156,22 @@ function get-cddafancy ($collection){
   return $fancystuff
 }
 
-# diver's watch should be updated to include the rolex submariner, which is super_fancy.
+<#
+notes on usage.
+
+$collection = get-cddacollection
+$guns = get-cddaguns $collection
+$armor = get-cddaarmor $collection
+$fancystuff = get-cddafancy $collection
+
+Now you can sort and run basic reports.
+$guns | format-table -auto
+$guns | where-object { $_.skill -eq "rifle" -and $_.ammo -eq "223" } | format-table -auto
+$guns | where-object { $_.skill -eq "pistol" } | ft
+$guns | where-object { $_.skill -eq "rifle" } | ft
+
+#>
+
 
 function parse-mapdata($savepath){
   cd $savepath
@@ -307,7 +319,11 @@ function write-cddacolormap($regionstr){
   }
 }
 
-# get the maps for boxcars
+<#
+# here are the example uses for how I have been using the map parser.
+
+# get the maps for boxcars, one of the worlds I'm playing in.
+
 $boxcarmaps = parse-mapdata("/usr/local/cat-20180521/save/Boxcars/")
 $boxcarknowncitynames = "Beddington","Centerville","Epsom","Ashland","New Ashford","Amesbury","Middlesex","Pittsburg"
 $boxcarcities = get-cddacities($boxcarknowncitynames)
@@ -317,7 +333,6 @@ $boxcarknowncities = $cities | where-object { $_.known -eq $true }
 $bcrawhwsto = get-cddarawmap 1 -1 $boxcarmaps # home is where the hardware store is.
 $bcrawsouth = get-cddarawmap 1 0 $boxcarmaps # south 1 map is where I explored the most so far.
 $bcrawspawn = get-cddarawmap 2 -1 $boxcarmaps # 1 east of hwstore is where I spawned in the campground.
-
 
 # parse the maps as a multiline string, which is 180x180.
 $bchomemap = write-cddamap $bcrawhwsto
@@ -329,7 +344,10 @@ write-cddacolormap $bcrawhwsto
 write-cddacolormap $bcrawsouth
 write-cddacolormap $bcrawspawn
 
-# get wasteland maps as a one line string
+# get wasteland maps (another world) as a one line string
+# wasteland maps appear to have a bug; I'm not sure if that's because I copied the char from another world.
+# it seems that there is some offset where maps fail once an x,y coord gets up to 10.
+
 $wlmaps = parse-mapdata("/usr/local/cat-20180521/save/Wasteland/")
 $wlknowncitynames = "Beaver Cove","North Canaan","Arlington"
 $wlcities = get-cddacities($wlknowncitynames)
@@ -339,14 +357,10 @@ $wlrawspawn = get-cddarawmap 1 -2 $wlmaps
 $wlspawnmap = write-cddamap $wlrawspawn
 write-cddacolormap $wlrawspawn
 
+#>
+
 <# map notes
 # layer 10 seems like it is the ground layer with z-levels enabled.
 # setting an accumulator and adding all of the counts in a single layer results in 32400
 # so it looks like an overmap region is 180x180.
-#>
-
-<#
-# e.g. armor
-$armor = $collection | where-object { $_.type -eq "ARMOR" }
-$lightarmor = $armor | where-object { $_.id -like "power*light" }
 #>
